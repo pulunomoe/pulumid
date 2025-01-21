@@ -1,0 +1,8 @@
+@font-face {
+  font-family: "Iosevka";
+  src: url("Iosevka-Regular.woff2") format("woff2");
+}
+
+* {
+  font-family: "Iosevka", sans-serif;
+}

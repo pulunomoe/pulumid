@@ -1,0 +1,3 @@
+# PuluMid
+
+PuluMid is supposed to be a **super** simple MIDI composer. If it's ever complete...
