@@ -1,4 +1,4 @@
-import { MouseEvent, ReactNode, useState } from "react";
+import React, { ReactNode, useCallback, useEffect, useRef } from "react";
 import { useAppDispatch, useAppSelector } from "../../store.ts";
 import {
   minimizeWidget,
@@ -16,57 +16,85 @@ const Widget = ({ name, title, children }: Props) => {
   const widget = useAppSelector(selectWidgets)[name];
   const dispatch = useAppDispatch();
 
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const isDragging = useRef(false);
+  const position = useRef({ x: widget.x, y: widget.y });
+  const dragOffset = useRef({ x: 0, y: 0 });
+  const animationFrame = useRef<number>();
+  const widgetDiv = useRef<HTMLDivElement>(null);
 
-  const startDragging = (event: MouseEvent) => {
-    setIsDragging(true);
-    setDragOffset({
-      x: event.clientX - widget.x,
-      y: event.clientY - widget.y,
+  const startDragging = (event: React.MouseEvent<HTMLDivElement>) => {
+    isDragging.current = true;
+    dragOffset.current = {
+      x: event.clientX - position.current.x,
+      y: event.clientY - position.current.y,
+    };
+
+    document.addEventListener("mousemove", handleDragging);
+    document.addEventListener("mouseup", stopDragging);
+  };
+
+  const handleDragging = (e: MouseEvent) => {
+    if (!isDragging.current) return;
+
+    if (animationFrame.current) {
+      cancelAnimationFrame(animationFrame.current);
+    }
+
+    animationFrame.current = requestAnimationFrame(() => {
+      const newX = e.clientX - dragOffset.current.x;
+      const newY = e.clientY - dragOffset.current.y;
+
+      position.current = { x: newX, y: newY };
+
+      if (widgetDiv.current) {
+        widgetDiv.current.style.transform = `translate3d(${newX}px, ${newY}px, 0)`;
+      }
     });
   };
 
-  const dragging = (event: MouseEvent) => {
-    if (!isDragging) {
-      return;
-    }
-    const newX = event.clientX - dragOffset.x;
-    const newY = event.clientY - dragOffset.y;
-    dispatch(moveWidget({ name, x: newX, y: newY }));
-  };
+  const stopDragging = useCallback(() => {
+    if (!isDragging.current) return;
 
-  const stopDragging = () => {
-    setIsDragging(false);
-    setDragOffset({ x: 0, y: 0 });
-  };
+    isDragging.current = false;
+    document.removeEventListener("mousemove", handleDragging);
+    document.removeEventListener("mouseup", stopDragging);
+
+    dispatch(moveWidget({ name, ...position.current }));
+
+    if (widgetDiv.current) {
+      widgetDiv.current.style.transform = `translate3d(${position.current.x}px, ${position.current.y}px, 0)`;
+    }
+  }, [dispatch, name]);
+
+  useEffect(() => {
+    return () => {
+      document.removeEventListener("mousemove", handleDragging);
+      document.removeEventListener("mouseup", stopDragging);
+      if (animationFrame.current) {
+        cancelAnimationFrame(animationFrame.current);
+      }
+    };
+  }, [stopDragging]);
 
   const minimize = () => {
     dispatch(minimizeWidget(name));
   };
 
-  if (!widget) {
-    return null;
-  }
-
   return (
     <div
-      className={`absolute border border-black bg-white`}
+      ref={widgetDiv}
+      className={`absolute transform-gpu border border-black bg-white`}
       style={{
-        top: `${widget.y}px`,
-        left: `${widget.x}px`,
-        zIndex: isDragging ? 999 : 10,
-        userSelect: isDragging ? "none" : "auto",
+        transform: `translate3d(${widget.x}px, ${widget.y}px, 0)`,
+        zIndex: isDragging.current ? 999 : 10,
+        userSelect: "none",
       }}
     >
       <div
         onMouseDown={startDragging}
-        onMouseMove={dragging}
-        onMouseUp={stopDragging}
-        onMouseLeave={stopDragging}
         className="flex flex-row items-center justify-between gap-2 bg-black px-2 py-1"
         style={{
-          cursor: isDragging ? "grabbing" : "grab",
+          cursor: isDragging.current ? "grabbing" : "grab",
         }}
       >
         <h1 className="font-bold text-white">{title}</h1>
